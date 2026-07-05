@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>คลินิกเวชกรรมแพทย์ณัฐดนัย [DEV]</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Sarabun', sans-serif; background: #f0f4f8; }
+    #boot-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(160deg, #1a5276 0%, #154360 100%);
+      color: #fff;
+      font-family: 'Sarabun', sans-serif;
+    }
+    #boot-screen .logo { font-size: 72px; margin-bottom: 20px; animation: pulse 2s infinite; }
+    #boot-screen .title { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+    #boot-screen .subtitle { font-size: 14px; color: rgba(255,255,255,0.65); margin-top: 6px; }
+    #boot-screen .dev-badge {
+      margin-top: 10px;
+      background: rgba(255,165,0,0.25);
+      border: 1px solid rgba(255,165,0,0.6);
+      color: #ffd280;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      border-radius: 99px;
+      padding: 3px 12px;
+    }
+    #boot-screen .error-box {
+      margin-top: 28px;
+      background: #fff;
+      color: #333;
+      border-radius: 12px;
+      padding: 20px 28px;
+      max-width: 420px;
+      width: calc(100% - 48px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      display: none;
+    }
+    #boot-screen .error-box .err-title { color: #e74c3c; font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+    #boot-screen .error-box .err-msg { color: #c0392b; font-size: 13px; font-family: monospace; line-height: 1.5; white-space: pre-wrap; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.8;transform:scale(1.05)} }
+  </style>
+
+  <!--
+    ╔══════════════════════════════════════════════════════════════╗
+    ║  DEV mode — loads saas-shell.jsx + clinic-dashboard.jsx via   ║
+    ║  Babel standalone. DO NOT use this file on Vercel production. ║
+    ║  For production deploy use index.html + the compiled .js.     ║
+    ╚══════════════════════════════════════════════════════════════╝
+  -->
+
+  <!-- React 18 (synchronous) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <!-- Supabase JS v2 -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js" crossorigin="anonymous"></script>
+  <!-- Babel standalone for JSX transform -->
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root">
+    <div id="boot-screen">
+      <div class="logo">🏥</div>
+      <div class="title">คลินิกเวชกรรมแพทย์ณัฐดนัย</div>
+      <div class="subtitle">กำลังโหลดระบบคลินิก...</div>
+      <div class="dev-badge">⚙️ DEV MODE — JSX</div>
+      <div class="error-box" id="err-box">
+        <div class="err-title">❌ JS Error:</div>
+        <div class="err-msg" id="err-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!--
+    Babel transforms these on the fly.
+    Keep type="text/babel" so imports work.
+    Note: Babel standalone is slow — use production index.html for real deploys.
+  -->
+  <script type="text/babel" data-presets="react" src="saas-shell.jsx"></script>
+  <script type="text/babel" data-presets="react" src="clinic-dashboard.jsx"></script>
+
+  <script>
+    /* Babel calls are async, so we poll for both SaaSRootRouter and AppRoot then mount */
+    (function waitForRoots() {
+      function ready() {
+        return typeof window.SaaSRootRouter === 'function' && typeof window.AppRoot === 'function';
+      }
+      function mount() {
+        var container = document.getElementById('root');
+        var root = ReactDOM.createRoot(container);
+        root.render(React.createElement(window.SaaSRootRouter));
+      }
+      if (ready()) {
+        try { mount(); } catch (e) { showError(e); }
+      } else {
+        var attempt = 0;
+        var timer = setInterval(function () {
+          attempt++;
+          if (ready()) {
+            clearInterval(timer);
+            try { mount(); } catch (e) { showError(e); }
+          } else if (attempt > 150) {
+            clearInterval(timer);
+            showError(new Error(
+              'SaaSRootRouter/AppRoot were not found after 15 s.\n' +
+              'Make sure saas-shell.jsx and clinic-dashboard.jsx are in the same folder\n' +
+              'and that Babel compiled them without errors.'
+            ));
+          }
+        }, 100);
+      }
+
+      function showError(e) {
+        var box = document.getElementById('err-box');
+        var msg = document.getElementById('err-msg');
+        if (box && msg) {
+          msg.textContent = e.message || String(e);
+          box.style.display = 'block';
+        }
+        console.error('[clinic-dashboard DEV] boot error:', e);
+      }
+    })();
+  </script>
+</body>
+</html>
