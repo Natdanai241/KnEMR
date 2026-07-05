@@ -310,7 +310,7 @@ function AppRoot() {
 
 // ===================== SUPABASE CONFIG =====================
 const SUPA_URL = "https://lozyfwydyrovxjtsgybn.supabase.co";
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxvenlmd3lkeXJvdnhqdHNneWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyMzAyNDcsImV4cCI6MjA5ODgwNjI0N30.i2QfDgm9NkNb0E7JIUh_4hnVYpLVt6pwslTuzUb4UA8";
+const SUPA_KEY = "sb_publishable_jI3JybKun8lwaokt8HT8lA_FMy3WfOi";
 
 const supa = {
   // Multi-tenant: headers/scope read live from window.__TENANT__ (set by saas-shell.js)

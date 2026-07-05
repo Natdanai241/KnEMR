@@ -7,9 +7,15 @@
    supa helper for tenant-scoped requests).
    ============================================================ */
 (function () {
-    const SUPABASE_URL = "https://gakbukcualmosxjbyfpw.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdha2J1a2N1YWxtb3N4amJ5ZnB3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4MDA5ODMsImV4cCI6MjA5ODM3Njk4M30.iYy1YN6N1gP3kvw2Ex2d9yKHUS_k4eKhxL2j-VYX93U";
+    const SUPABASE_URL = "https://lozyfwydyrovxjtsgybn.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_jI3JybKun8lwaokt8HT8lA_FMy3WfOi";
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    function withTimeout(promise, ms, label) {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error((label || "การเชื่อมต่อ") + "หมดเวลา — ตรวจสอบอินเทอร์เน็ตหรือสถานะ Supabase (โปรเจกต์อาจถูกพักไว้)")), ms)),
+        ]);
+    }
     window.__sb = sb;
     window.__TENANT__ = { clinicId: null, accessToken: null };
     const PDPA_VERSION = "1.0";
@@ -55,7 +61,7 @@
             setBusy(true);
             setErr("");
             try {
-                const { error } = await sb.auth.signInWithPassword({ email, password });
+                const { error } = await withTimeout(sb.auth.signInWithPassword({ email, password }), 10000, "เข้าสู่ระบบ");
                 if (error)
                     throw error;
                 onAuthed();
@@ -228,7 +234,7 @@
         const [state, setState] = React.useState({ phase: "loading" });
         async function loadAll(session) {
             try {
-                const { data: profile, error: pErr } = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
+                const { data: profile, error: pErr } = await withTimeout(sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle(), 10000, "โหลดโปรไฟล์");
                 if (pErr)
                     throw pErr;
                 if (!profile) {
@@ -281,7 +287,7 @@
             }
         }
         React.useEffect(() => {
-            sb.auth.getSession()
+            withTimeout(sb.auth.getSession(), 10000, "โหลดเซสชัน")
                 .then(({ data }) => { if (data.session)
                     loadAll(data.session);
                 else
