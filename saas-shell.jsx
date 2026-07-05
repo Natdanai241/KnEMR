@@ -76,24 +76,12 @@
     async function doOnboard() {
       setBusy(true); setErr("");
       try {
-        const { data: su, error: e1 } = await sb.auth.signUp({ email, password });
+        const { data: su, error: e1 } = await sb.auth.signUp({
+          email, password, options: { data: { full_name: fullName, intent: "onboard", clinic_name: clinicName } }
+        });
         if (e1) throw e1;
-        const uid = su.user && su.user.id;
-        if (!uid) { setNotice("สมัครสำเร็จ กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ"); setMode("login"); return; }
-
-        const slug = clinicName.toLowerCase().trim().replace(/[^a-z0-9ก-๙-]+/g, "-").replace(/(^-|-$)/g, "") || ("clinic-" + Date.now());
-        const { data: clinic, error: e2 } = await sb.from("clinics").insert({ name: clinicName, slug, status: "active" }).select().single();
-        if (e2) throw e2;
-
-        const { error: e3 } = await sb.from("profiles").insert({ id: uid, clinic_id: clinic.id, full_name: fullName, role: "doctor", status: "approved" });
-        if (e3) throw e3;
-
-        const { data: trialPlan } = await sb.from("plans").select("id").eq("code", "trial").single();
-        const trialEnds = new Date(Date.now() + 14 * 86400000).toISOString();
-        const { error: e4 } = await sb.from("clinic_subscriptions").insert({ clinic_id: clinic.id, plan_id: trialPlan.id, status: "trialing", trial_ends_at: trialEnds, current_period_end: trialEnds });
-        if (e4) throw e4;
-
-        onAuthed();
+        if (su.session) { onAuthed(); }
+        else { setNotice("สมัครสำเร็จ กรุณายืนยันอีเมล แล้วกลับมาเข้าสู่ระบบอีกครั้ง"); setMode("login"); }
       } catch (e) { setErr(e.message || String(e)); }
       finally { setBusy(false); }
     }
@@ -101,20 +89,17 @@
     async function doJoin() {
       setBusy(true); setErr("");
       try {
-        const { data: clinic, error: ce } = await sb.from("clinics").select("id").eq("slug", joinCode.trim().toLowerCase()).maybeSingle();
+        const slug = joinCode.trim().toLowerCase();
+        const { data: clinic, error: ce } = await sb.from("clinics").select("id").eq("slug", slug).maybeSingle();
         if (ce) throw ce;
         if (!clinic) throw new Error("ไม่พบรหัสคลินิกนี้");
 
-        const { data: su, error: e1 } = await sb.auth.signUp({ email, password });
+        const { data: su, error: e1 } = await sb.auth.signUp({
+          email, password, options: { data: { full_name: fullName, intent: "join", clinic_slug: slug } }
+        });
         if (e1) throw e1;
-        const uid = su.user && su.user.id;
-        if (!uid) { setNotice("สมัครสำเร็จ กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ"); setMode("login"); return; }
-
-        const { error: e2 } = await sb.from("profiles").insert({ id: uid, clinic_id: clinic.id, full_name: fullName, role: "staff", status: "pending" });
-        if (e2) throw e2;
-
-        setNotice("ลงทะเบียนสำเร็จ กรุณารอแพทย์อนุมัติบัญชีของท่าน");
-        setMode("login");
+        if (su.session) { onAuthed(); }
+        else { setNotice("ลงทะเบียนสำเร็จ กรุณายืนยันอีเมล แล้วเข้าสู่ระบบเพื่อรอการอนุมัติ"); setMode("login"); }
       } catch (e) { setErr(e.message || String(e)); }
       finally { setBusy(false); }
     }
@@ -275,13 +260,12 @@
     async function doBootstrap() {
       setBusy(true); setErr("");
       try {
-        const { data: su, error: e1 } = await sb.auth.signUp({ email, password });
+        const { data: su, error: e1 } = await sb.auth.signUp({
+          email, password, options: { data: { full_name: fullName, intent: "bootstrap" } }
+        });
         if (e1) throw e1;
-        const uid = su.user && su.user.id;
-        if (!uid) { setNotice("สมัครสำเร็จ กรุณายืนยันอีเมล แล้วกลับมาเข้าสู่ระบบอีกครั้ง"); return; }
-        const { error: e2 } = await sb.from("profiles").insert({ id: uid, clinic_id: null, full_name: fullName, role: "super_admin", status: "approved" });
-        if (e2) throw e2;
-        onDone();
+        if (su.session) { onDone(); }
+        else { setNotice("สมัครสำเร็จ กรุณายืนยันอีเมล แล้วกลับมาเข้าสู่ระบบอีกครั้ง"); }
       } catch (e) { setErr(e.message || String(e)); }
       finally { setBusy(false); }
     }
@@ -315,7 +299,43 @@
     }
 
     async function loadAll(session) {
-      const { data: profile } = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
+      let { data: profile } = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
+
+      if (!profile) {
+        const meta = session.user.user_metadata || {};
+        try {
+          if (meta.intent === "bootstrap") {
+            const { data: noAdmin } = await sb.rpc("super_admin_exists");
+            if (noAdmin === false) {
+              const { data: created } = await sb.from("profiles")
+                .insert({ id: session.user.id, clinic_id: null, full_name: meta.full_name, role: "super_admin", status: "approved" })
+                .select().maybeSingle();
+              profile = created;
+            }
+          } else if (meta.intent === "onboard" && meta.clinic_name) {
+            const slug = meta.clinic_name.toLowerCase().trim().replace(/[^a-z0-9ก-๙-]+/g, "-").replace(/(^-|-$)/g, "") || ("clinic-" + Date.now());
+            const { data: clinic } = await sb.from("clinics").insert({ name: meta.clinic_name, slug, status: "active" }).select().single();
+            if (clinic) {
+              const { data: created } = await sb.from("profiles")
+                .insert({ id: session.user.id, clinic_id: clinic.id, full_name: meta.full_name, role: "doctor", status: "approved" })
+                .select().maybeSingle();
+              profile = created;
+              const { data: trialPlan } = await sb.from("plans").select("id").eq("code", "trial").single();
+              const trialEnds = new Date(Date.now() + 14 * 86400000).toISOString();
+              await sb.from("clinic_subscriptions").insert({ clinic_id: clinic.id, plan_id: trialPlan.id, status: "trialing", trial_ends_at: trialEnds, current_period_end: trialEnds });
+            }
+          } else if (meta.intent === "join" && meta.clinic_slug) {
+            const { data: clinic } = await sb.from("clinics").select("id").eq("slug", meta.clinic_slug).maybeSingle();
+            if (clinic) {
+              const { data: created } = await sb.from("profiles")
+                .insert({ id: session.user.id, clinic_id: clinic.id, full_name: meta.full_name, role: "staff", status: "pending" })
+                .select().maybeSingle();
+              profile = created;
+            }
+          }
+        } catch (_) {}
+      }
+
       if (!profile) { enterAuth(); return; }
 
       window.__TENANT__.clinicId = profile.clinic_id;
